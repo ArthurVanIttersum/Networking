@@ -40,7 +40,7 @@ public class Server : MonoBehaviour
         // Initialize the dispatcher and callbacks for incoming OSC messages:
         dispatcher = new OSCDispatcher();
         dispatcher.ShowIncomingMessages = true;
-        InitializeModel();
+        
         Initialize();
     }
 
@@ -69,7 +69,7 @@ public class Server : MonoBehaviour
             // We had fewer than 2 players, so this new client will be a player.
             playerIDs[newClient] = playerIDs.Count;
             Debug.Log($"Registering new player: {newClient.Remote} = player {playerIDs[newClient]}");
-            model.JoinGame(newClient.Remote);//let first player do stuff before other player joins
+            
             if (playerIDs.Count == 2)
             { // start game
                 Debug.Log("Server: starting game");
@@ -77,6 +77,9 @@ public class Server : MonoBehaviour
                 {
                     SendPrivateInformationCommand(playerIDs[pid], pid);
                 }
+                InitializeModel();
+                model.JoinGame(connections[0].Remote);
+                model.JoinGame(connections[1].Remote);
             }
         }
         else
@@ -149,7 +152,7 @@ public class Server : MonoBehaviour
         // The (optional) list of parameter types (OSCUtil.INT) lets the dispatcher filter
         //  messages that do not satisfy the expected signature (=parameter list):
         
-        dispatcher.AddListener("/JoinGame", JoinGameRpc);
+        //dispatcher.AddListener("/JoinGame", JoinGameRpc);
         dispatcher.AddListener("/ChooseBoatLocation", ChooseBoatLocationRpc);
         dispatcher.AddListener("/RemoveBoat", RemoveBoatRpc);
         dispatcher.AddListener("/ReadyToMoveOn", ReadyToMoveOnRpc);
@@ -158,10 +161,10 @@ public class Server : MonoBehaviour
     }
 
     // ----- Handle incoming RPCs (called by dispatcher): C->S
-    public void JoinGameRpc(OSCMessageIn message, IPEndPoint remote)
-    {
-        model.JoinGame(remote);
-    }
+    //public void JoinGameRpc(OSCMessageIn message, IPEndPoint remote)// not a real one
+    //{
+    //    model?.JoinGame(remote);
+    //}
 
     public void ChooseBoatLocationRpc(OSCMessageIn message, IPEndPoint remote)
     {
@@ -170,7 +173,7 @@ public class Server : MonoBehaviour
         int column = message.ReadInt();
         bool horizontal = message.ReadBool();
         
-        model.PlaceBoat(column, row, remote, boatType, horizontal);
+        model?.PlaceBoat(column, row, remote, boatType, horizontal);
     }
 
     public void RemoveBoatRpc(OSCMessageIn message, IPEndPoint remote)
@@ -178,13 +181,13 @@ public class Server : MonoBehaviour
         int row = message.ReadInt();
         int column = message.ReadInt();
         
-        model.RemoveBoat(column, row, remote);
+        model?.RemoveBoat(column, row, remote);
     }
 
     public void ReadyToMoveOnRpc(OSCMessageIn message, IPEndPoint remote)
     {
 
-        model.ReadyToMoveOn(remote);
+        model?.ReadyToMoveOn(remote);
     }
 
 
@@ -194,7 +197,7 @@ public class Server : MonoBehaviour
         int row = message.ReadInt();
         int column = message.ReadInt();
 
-        model.ShootMissile(column, row, remote);
+        model?.ShootMissile(column, row, remote);
     }
 
 
