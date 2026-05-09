@@ -1,0 +1,285 @@
+using NetworkConnections;
+using OSCTools;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Net.Sockets;
+
+//using UnityEditor.MemoryProfiler;
+//using UnityEditor.VersionControl;
+using UnityEngine;
+using static UnityEngine.UI.Image;
+
+/// <summary>
+/// The Server is the class that manages network connections with all clients, and 
+/// communicates with the game code (Model classes).
+/// </summary>
+public class Server : MonoBehaviour
+{
+    // ----- General server code:
+    TcpListener listener;
+    List<TcpNetworkConnection> connections;
+    OSCDispatcher dispatcher;
+    TcpNetworkConnection CurrentPacketSource;
+    /// ------ TicTacToe Server code:
+    /// 
+    ServerModel model;
+    
+    public Dictionary<TcpNetworkConnection, int> playerIDs = new Dictionary<TcpNetworkConnection, int>();
+
+    void Start()
+    {
+        // This server starts with a listener:
+        int port = 50007;
+        Debug.Log("Starting server at " + port);
+        listener = new TcpListener(IPAddress.Any, port);
+        listener.Start();
+
+        connections = new List<TcpNetworkConnection>();
+
+        // Initialize the dispatcher and callbacks for incoming OSC messages:
+        dispatcher = new OSCDispatcher();
+        dispatcher.ShowIncomingMessages = true;
+        InitializeModel();
+        Initialize();
+    }
+
+    void Update()
+    {
+        AcceptNewConnections();
+        UpdateConnections();
+        CleanupConnections();
+    }
+
+    void AcceptNewConnections()
+    {
+        if (listener.Pending())
+        {
+            TcpClient client = listener.AcceptTcpClient();
+            TcpNetworkConnection connection = new TcpNetworkConnection(client);
+            connections.Add(connection);
+            Debug.Log("Server: Adding new connection from " + connection.Remote);
+            ClientJoined(connection);
+        }
+    }
+    void ClientJoined(TcpNetworkConnection newClient)
+    {
+        if (playerIDs.Count < 2)
+        {
+            // We had fewer than 2 players, so this new client will be a player.
+            playerIDs[newClient] = playerIDs.Count;
+            Debug.Log($"Registering new player: {newClient.Remote} = player {playerIDs[newClient]}");
+            model.JoinGame(newClient.Remote);//let first player do stuff before other player joins
+            if (playerIDs.Count == 2)
+            { // start game
+                Debug.Log("Server: starting game");
+                foreach (var pid in playerIDs.Keys)
+                {
+                    SendPrivateInformationCommand(playerIDs[pid], pid);
+                }
+            }
+        }
+        else
+        {
+            Debug.Log("Sorry - already have two players");
+            // Note: this client is still allowed to join as spectator, but not as player!
+            // TODO: Send a message to this client
+        }
+    }
+
+    void UpdateConnections()
+    {
+        foreach (TcpNetworkConnection conn in connections)
+        {
+            // The connection will call HandlePacket when a packet is available:
+            while (conn.Available() > 0)
+            {
+                CurrentPacketSource = conn;
+                HandlePacket(conn.GetPacket(), conn.Remote);
+            }
+        }
+    }
+
+    public TcpNetworkConnection getFromEndPoint(IPEndPoint destination)
+    {
+        return connections.Find(a => a.Remote == destination);
+    }
+
+    public int GetPlayerIDFromEP(IPEndPoint destination)
+    {
+        return playerIDs[getFromEndPoint(destination)];
+    }
+
+    void HandlePacket(byte[] packet, IPEndPoint remote)
+    {
+        OSCMessageIn mess = new OSCMessageIn(packet);
+        Debug.Log("Message arrives on server: " + mess);
+
+        dispatcher.HandlePacket(packet, remote);
+    }
+
+    void CleanupConnections()
+    {
+        // TODO
+    }
+
+    void InitializeModel()
+    {
+        model = new ServerModel();
+        model.server = this;
+        model.boatData = FindFirstObjectByType<BoatData>();
+
+        
+
+        model.MessageWelcomePlayer += MessageWelcomePlayer;
+        model.MessagePlayerReady += MessagePlayerReady;
+        model.MessageAllPlayersReady += MessageAllPlayersReady;
+
+        model.AttackHit += AttackHit;
+        model.AttackMiss += AttackMiss;
+        model.AttackFatal += AttackFatal;
+        model.GameOver += GameOver;
+    }
+
+    void Initialize()
+    {
+        
+
+        // Subscribe listeners for incoming messages:
+        // The (optional) list of parameter types (OSCUtil.INT) lets the dispatcher filter
+        //  messages that do not satisfy the expected signature (=parameter list):
+        
+        dispatcher.AddListener("/JoinGame", JoinGameRpc);
+        dispatcher.AddListener("/ChooseBoatLocation", ChooseBoatLocationRpc);
+        dispatcher.AddListener("/RemoveBoat", RemoveBoatRpc);
+        dispatcher.AddListener("/ReadyToMoveOn", ReadyToMoveOnRpc);
+
+        dispatcher.AddListener("/AttackLocation", AttackLocationRpc);
+    }
+
+    // ----- Handle incoming RPCs (called by dispatcher): C->S
+    public void JoinGameRpc(OSCMessageIn message, IPEndPoint remote)
+    {
+        model.JoinGame(remote);
+    }
+
+    public void ChooseBoatLocationRpc(OSCMessageIn message, IPEndPoint remote)
+    {
+        BoatData.Boats boatType = (BoatData.Boats)message.ReadInt();
+        int row = message.ReadInt();
+        int column = message.ReadInt();
+        bool horizontal = message.ReadBool();
+        
+        model.PlaceBoat(column, row, remote, boatType, horizontal);
+    }
+
+    public void RemoveBoatRpc(OSCMessageIn message, IPEndPoint remote)
+    {
+        int row = message.ReadInt();
+        int column = message.ReadInt();
+        
+        model.RemoveBoat(column, row, remote);
+    }
+
+    public void ReadyToMoveOnRpc(OSCMessageIn message, IPEndPoint remote)
+    {
+
+        model.ReadyToMoveOn(remote);
+    }
+
+
+
+    public void AttackLocationRpc(OSCMessageIn message, IPEndPoint remote)
+    {
+        int row = message.ReadInt();
+        int column = message.ReadInt();
+
+        model.ShootMissile(column, row, remote);
+    }
+
+
+    // ----- Outgoing RPCs: S->C
+    // This RPC is called when a client joins who is a player:
+    void SendPrivateInformationCommand(int playerID, TcpNetworkConnection connection)
+    {
+        OSCMessageOut message = new OSCMessageOut("/PlayerInfo").AddInt(playerID);
+        connection.Send(message.GetBytes()); // private message
+    }
+    
+    
+    
+    
+    void Broadcast(byte[] packet)
+    {
+        foreach (var conn in connections)
+        {
+            conn.Send(packet);
+        }
+    }
+    //S->C
+
+    
+
+    public void MessageWelcomePlayer(string text, int playerID)
+    {
+        OSCMessageOut message = new OSCMessageOut("/MessageWelcomePlayer").AddString(text).AddInt(playerID);
+        Broadcast(message.GetBytes());
+    }
+    public void MessagePlacementValid(BoatData.Boats boatType, int row, int column, IPEndPoint destination, bool horizontal)
+    {
+        OSCMessageOut message = new OSCMessageOut("/MessagePlacementValid").AddInt((int)boatType).AddInt(row).AddInt(column).AddBool(horizontal);
+        
+        getFromEndPoint(destination).Send(message.GetBytes());
+
+    }
+    public void MessageBadBoat(string text, IPEndPoint destination)
+    {
+        OSCMessageOut message = new OSCMessageOut("/MessageBadBoat").AddString(text);
+
+        getFromEndPoint(destination).Send(message.GetBytes());
+
+    }
+    public void MessageBoatRemoved(int row, int column, IPEndPoint destination)
+    {
+        OSCMessageOut message = new OSCMessageOut("/MessageBoatRemoved").AddInt(row).AddInt(column);
+        
+        getFromEndPoint(destination).Send(message.GetBytes());
+    }
+
+    public void MessagePlayerReady(string text, int numberReady)
+    {
+        OSCMessageOut message = new OSCMessageOut("/MessagePlayerReady").AddString(text).AddInt(numberReady);
+        Broadcast(message.GetBytes());
+    }
+
+    public void MessageAllPlayersReady(string text, int playerID)
+    {
+        OSCMessageOut message = new OSCMessageOut("/MessageAllPlayersReady").AddString(text).AddInt(playerID);
+        Broadcast(message.GetBytes());
+    }
+
+
+
+    public void AttackHit(int row, int column, int origin)
+    {
+
+        OSCMessageOut message = new OSCMessageOut("/AttackHit").AddInt(row).AddInt(column).AddInt(origin);
+        Broadcast(message.GetBytes());
+    }
+
+    public void AttackMiss(int row, int column, int origin)
+    {
+        OSCMessageOut message = new OSCMessageOut("/AttackMiss").AddInt(row).AddInt(column).AddInt(origin);
+        Broadcast(message.GetBytes());
+    }
+    public void AttackFatal(int row, int column, int origin, BoatData.Boats type, bool horizontal)
+    {
+        OSCMessageOut message = new OSCMessageOut("/AttackFatal").AddInt(row).AddInt(column).AddInt(origin).AddInt((int)type).AddBool(horizontal);
+        Broadcast(message.GetBytes());
+    }
+    public void GameOver(string text)
+    {
+        OSCMessageOut message = new OSCMessageOut("/GameOver").AddString(text);
+        Broadcast(message.GetBytes());
+    }
+}
