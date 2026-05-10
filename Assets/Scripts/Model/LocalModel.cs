@@ -42,6 +42,8 @@ public class LocalModel
         client.AttackFatal += AttackFatal;
         client.MessagePlacementValid += BoatPlacementValid;
         client.MessageBoatRemoved += RemoveBoat;
+        client.GameOver += GameOver;
+        client.MessageAllPlayersReady += AllPlayersReady;
 
 
 
@@ -155,5 +157,33 @@ public class LocalModel
 
         displayBoats.UpdateDisplay(boardBoats, boatData.BoatsToSprite);
         displayBoats.UpdateBoatSize(boatList);
+    }
+
+    public void AllPlayersReady(string text, int playerID)
+    {
+        gamestate = 1;
+        if (playerID == clientID)
+        {
+            textDisplay.UpdateDisplay(text + " You can shoot first");
+        }
+        else
+        {
+            textDisplay.UpdateDisplay(text + " Your opponent can shoot first");
+        }
+
+    }
+
+    //any state
+
+    public void GameOver(string text, int playerID)
+    {
+        if (playerID == clientID)
+        {
+            textDisplay.UpdateDisplay(text + " you won");
+        }
+        else
+        {
+            textDisplay.UpdateDisplay(text + " you lost");
+        }
     }
 }

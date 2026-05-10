@@ -21,7 +21,7 @@ public class ServerModel
 
 
     //local values
-    public List<IPEndPoint> clients = new();
+    
     public int currentPlayer = 0;
     public int otherPlayer = 1;
     public List<IPEndPoint> readyPlayers = new();
@@ -40,24 +40,20 @@ public class ServerModel
     public event Action<int, int, int> AttackHit;
     public event Action<int, int, int> AttackMiss;
     public event Action<int, int, int, BoatData.Boats, bool> AttackFatal;
-    public event Action<string> GameOver;
+    public event Action<string, int> GameOver;
 
 
 
     //state0
 
-    public void JoinGame(IPEndPoint origin)
+    public void JoinGame(IPEndPoint player1, IPEndPoint player2)
     {
         if (!IsStateRight(0)) return;
-        
-        if (clients.Count == 2) return;//quick sanity check
 
-        if (clients.Contains(origin)) return;//second sanity check
-
-        clients.Add(origin);
-
-        server.MessageWelcomePlayer("welcome player", clients.Count - 1);
-
+        int id1 = server.GetPlayerIDFromEP(player1);
+        int id2 = server.GetPlayerIDFromEP(player2);
+        server.MessageWelcomePlayer("welcome player", id1);
+        server.MessageWelcomePlayer("welcome player", id2);
     }
     public void PlaceBoat(int column, int row, IPEndPoint origin, BoatData.Boats type, bool horizontal)//place whole boat
     {
@@ -140,10 +136,11 @@ public class ServerModel
         // TODO: What happens if a client sends this message during the wrong phase?
         if (!IsStateRight(1)) return;
 
-        if (origin != clients[currentPlayer]) return;//ignore messages from the wrong player
-
         int id = server.GetPlayerIDFromEP(origin);
         int otherid = 1 - id;
+
+        if (id != currentPlayer) return;//ignore messages from the wrong player
+
 
         //check board data
         if (!BoatBoards[otherid].IsInBounds(row, column)) return;
@@ -174,7 +171,11 @@ public class ServerModel
                 }
                 boat.sunk = true;
                 server.AttackFatal(boat.row, boat.column, currentPlayer, boat.boatType, boat.horizontal);
-                if (boatLists[otherid].IsAllSunk()) server.GameOver("game over");
+                if (boatLists[otherid].IsAllSunk())
+                {
+                    server.GameOver("game over", id);
+                    server.EndGame();
+                }
             }
             else
             {
@@ -193,4 +194,19 @@ public class ServerModel
         return (gameState == gamestate);
     }
 
+    public void DestroyModel()
+    {
+        //remove any remaining events
+
+        MessageWelcomePlayer = null;
+        MessagePlacementValid = null;
+        MessageBoatRemoved = null;
+        MessagePlayerReady = null;
+        MessageAllPlayersReady = null;
+
+        AttackHit = null;
+        AttackMiss = null;
+        AttackFatal = null;
+        GameOver = null;
+    }
 }

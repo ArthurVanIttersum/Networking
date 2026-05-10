@@ -35,7 +35,7 @@ public class Client : MonoBehaviour
     public event Action<int, int, int> AttackHit;
     public event Action<int, int, int> AttackMiss;
     public event Action<int, int, int, BoatData.Boats, bool> AttackFatal;
-    public event Action<string> GameOver;
+    public event Action<string, int> GameOver;
 
     public LocalModel localModel;
 
@@ -61,10 +61,15 @@ public class Client : MonoBehaviour
     /// </summary>
     void HandlePacket(byte[] packet, IPEndPoint remote)
     {
+        // Ignore heartbeat packets (1 byte = 0)
+        if (packet.Length == 1 && packet[0] == 0)
+            return;
+
         OSCMessageIn mess = new OSCMessageIn(packet);
         Debug.Log("Message arrives on client: " + mess);
         dispatcher.HandlePacket(packet, remote);
     }
+
 
     void Update()
     {
@@ -104,7 +109,7 @@ public class Client : MonoBehaviour
         dispatcher.AddListener("/AttackHit", AttackHitRpc, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT);
         dispatcher.AddListener("/AttackMiss", AttackMissRpc, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT);
         dispatcher.AddListener("/AttackFatal", AttackFatalRpc, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT, OSCUtil.BOOL);
-        dispatcher.AddListener("/GameOver", GameOverRpc, OSCUtil.STRING);
+        dispatcher.AddListener("/GameOver", GameOverRpc, OSCUtil.STRING, OSCUtil.INT);
     }
 
     // ----- Incoming RPCs (events are triggered, and View classes subscribe): S->C
@@ -159,8 +164,8 @@ public class Client : MonoBehaviour
         int numberOfPlayersReady = message.ReadInt();
 
         MessagePlayerReady?.Invoke(text, numberOfPlayersReady);
-        localModel.textDisplay.UpdateDisplay("this many players are ready:" + numberOfPlayersReady);//use action maybe
-        Debug.Log("messagePlayerReadyRpc is getting activated. now do something");
+        localModel.textDisplay.UpdateDisplay(text + numberOfPlayersReady);//use action maybe
+        
     }
 
     public void MessageAllPlayersReadyRpc(OSCMessageIn message, IPEndPoint remote)//implement later
@@ -169,8 +174,7 @@ public class Client : MonoBehaviour
         int IdOfCurrentPlayer = message.ReadInt();
 
         MessageAllPlayersReady?.Invoke(text, IdOfCurrentPlayer);
-        localModel.gamestate = 1;
-        localModel.textDisplay.UpdateDisplay("all players ready");
+        
     }
 
     //state2
@@ -205,8 +209,10 @@ public class Client : MonoBehaviour
     public void GameOverRpc(OSCMessageIn message, IPEndPoint remote)
     {
         string text = message.ReadString();
-        localModel.textDisplay.UpdateDisplay(text);
-        GameOver?.Invoke(text);
+        int playerID = message.ReadInt();
+        
+        
+        GameOver?.Invoke(text, playerID);
     }
 
     // ----- Outgoing RPCs (called from Controller): C->S

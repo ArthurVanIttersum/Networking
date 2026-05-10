@@ -38,8 +38,12 @@ namespace NetworkConnections {
 		bool _isReadingPacket = false;
 		int _nextPacketLength;
 
-		// Cached + lazily initialized socket properties (to prevent exceptions):
-		int localPort = -1;
+		//heartbeat
+        DateTime lastHeardFrom = DateTime.UtcNow;
+        DateTime lastHeartbeatSent = DateTime.UtcNow;
+
+        // Cached + lazily initialized socket properties (to prevent exceptions):
+        int localPort = -1;
 		IPEndPoint remote=null;
 
 		 
@@ -55,7 +59,12 @@ namespace NetworkConnections {
 
 			socket = new TcpClient();
 			socket.NoDelay = fast;
-			if (asynchronous) {
+
+            // Enable TCP KeepAlive
+            socket.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+
+
+            if (asynchronous) {
 				socket.BeginConnect(remoteIPstring, remotePort, new AsyncCallback(ConnectionCallback), this);
 			} else {
 				try {
@@ -74,7 +83,10 @@ namespace NetworkConnections {
 		/// <param name="client">TcpClient accepted from listener</param>
 		public TcpNetworkConnection(TcpClient client) {
 			socket = client;
-			if (client.Connected) {
+
+            // Enable TCP KeepAlive
+            socket.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+            if (client.Connected) {
 				Status = ConnectionStatus.Connected;
 				if (client.Client.LocalEndPoint != null) {
 					localPort = ((IPEndPoint)socket.Client.LocalEndPoint).Port;
@@ -116,15 +128,36 @@ namespace NetworkConnections {
 				ConnectionLog.WriteLine("NetworkConnection.Update: socket closed by remote");
 				return;
 			}
-			try {
+            // Heartbeat timeout
+            if ((DateTime.UtcNow - lastHeardFrom).TotalSeconds > 15)
+            {
+                Status = ConnectionStatus.Disconnected;
+                ConnectionLog.WriteLine("Heartbeat timeout: remote not responding");
+                return;
+            }
+            // HEARTBEAT SENDER
+            if ((DateTime.UtcNow - lastHeartbeatSent).TotalSeconds > 5)
+            {
+                Send(new byte[] { 0 }); // heartbeat
+                lastHeartbeatSent = DateTime.UtcNow;
+            }
+            try {
 				while (Status == ConnectionStatus.Connected && socket.Available > 0) {
 					NetworkStream stream = socket.GetStream();
 
 					if (_isReadingPacket) { // we have read the header of a packet, and are currently waiting for the full body to arrive
 						if (socket.Available >= _nextPacketLength) {
 							byte[] data = new byte[_nextPacketLength];
-							stream.Read(data, 0, _nextPacketLength);
-							_isReadingPacket = false;
+
+                            int bytesRead = stream.Read(data, 0, _nextPacketLength);
+                            if (bytesRead == 0)//test when connection ends
+                            {
+                                Status = ConnectionStatus.Disconnected;
+                                return;
+                            }
+                            lastHeardFrom = DateTime.UtcNow;//update time since update
+
+                            _isReadingPacket = false;
 							incoming.Enqueue(data);
 						} else {
 							return; // wait for the rest of the packet to arrive
@@ -132,8 +165,16 @@ namespace NetworkConnections {
 					} else {
 						if (socket.Available >= 4) { // read the header
 							byte[] data = new byte[4];
-							stream.Read(data, 0, 4);
-							_nextPacketLength = BitConverter.ToInt32(data, 0);
+
+                            int bytesRead = stream.Read(data, 0, 4);
+                            if (bytesRead == 0)
+                            {
+                                Status = ConnectionStatus.Disconnected;
+                                return;
+                            }
+                            lastHeardFrom = DateTime.UtcNow;
+
+                            _nextPacketLength = BitConverter.ToInt32(data, 0);
 							_isReadingPacket = true;
 							ConnectionLog.WriteLine(2, "Incoming packet of length {0}", _nextPacketLength);
 						} else {

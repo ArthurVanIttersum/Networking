@@ -78,8 +78,8 @@ public class Server : MonoBehaviour
                     SendPrivateInformationCommand(playerIDs[pid], pid);
                 }
                 InitializeModel();
-                model.JoinGame(connections[0].Remote);
-                model.JoinGame(connections[1].Remote);
+                model?.JoinGame(connections[0].Remote, connections[1].Remote);
+                
             }
         }
         else
@@ -115,6 +115,8 @@ public class Server : MonoBehaviour
 
     void HandlePacket(byte[] packet, IPEndPoint remote)
     {
+        if (packet.Length == 1 && packet[0] == 0) return; // ignore heartbeat
+        
         OSCMessageIn mess = new OSCMessageIn(packet);
         Debug.Log("Message arrives on server: " + mess);
 
@@ -123,16 +125,45 @@ public class Server : MonoBehaviour
 
     void CleanupConnections()
     {
-        // TODO
+        bool anyDisconnected = false;
+
+        for (int i = connections.Count - 1; i >= 0; i--)
+        {
+            var conn = connections[i];
+            if (conn.Status == ConnectionStatus.Disconnected)
+            {
+                Debug.Log("Removing disconnected client: " + conn.Remote);
+
+                playerIDs.Remove(conn);
+
+                connections.RemoveAt(i);
+                anyDisconnected = true;
+            }
+        }
+
+        if (!anyDisconnected) return;
+
+        // Remaining player wins
+        foreach (var conn in connections)
+        {
+            GameOver("opponent disconnected", GetPlayerIDFromEP(conn.Remote));
+        }
+
+        EndGame();
     }
+
+    public void EndGame()
+    {
+        model.DestroyModel();
+        model = null;
+    }
+
 
     void InitializeModel()
     {
         model = new ServerModel();
         model.server = this;
         model.boatData = FindFirstObjectByType<BoatData>();
-
-        
 
         model.MessageWelcomePlayer += MessageWelcomePlayer;
         model.MessagePlayerReady += MessagePlayerReady;
@@ -280,9 +311,9 @@ public class Server : MonoBehaviour
         OSCMessageOut message = new OSCMessageOut("/AttackFatal").AddInt(row).AddInt(column).AddInt(origin).AddInt((int)type).AddBool(horizontal);
         Broadcast(message.GetBytes());
     }
-    public void GameOver(string text)
+    public void GameOver(string text, int winner)
     {
-        OSCMessageOut message = new OSCMessageOut("/GameOver").AddString(text);
+        OSCMessageOut message = new OSCMessageOut("/GameOver").AddString(text).AddInt(winner);
         Broadcast(message.GetBytes());
     }
 }
