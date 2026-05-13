@@ -54,6 +54,7 @@ public class Client : MonoBehaviour
         dispatcher = new OSCDispatcher();
         dispatcher.ShowIncomingMessages = true;
         Initialize();
+        
     }
 
     /// <summary>
@@ -81,21 +82,33 @@ public class Client : MonoBehaviour
         // TODO: disconnect handling
     }
 
-    void Initialize()
+    private void InitializeModel()
     {
         localModel = new LocalModel();
-        
+
         localModel.boatData = FindFirstObjectByType<BoatData>();
         localModel.triedData = FindFirstObjectByType<TriedData>();
-        List<DisplayGrid> displays = FindObjectsByType<DisplayGrid>(FindObjectsSortMode.None).ToList();
 
+        List<DisplayGrid> displays = FindObjectsByType<DisplayGrid>(FindObjectsSortMode.None).ToList();
         localModel.displayBoats = displays.Find(d => d.type == "Boats");
         localModel.displayTried = displays.Find(d => d.type == "Tried");
         localModel.displayOpponentTried = displays.Find(d => d.type == "Lost");
 
         localModel.textDisplay = FindFirstObjectByType<DisplayText>();
-        FindFirstObjectByType<SwitchOrientation>().switchOrientation += localModel.SwitchOrientation;
+        localModel.orientation = FindFirstObjectByType<SwitchOrientation>();
+        
         localModel.Initialize(this);
+    }
+
+    public void DisposeModel()
+    {
+        localModel.Dispose();
+        localModel = null;
+    }
+
+    void Initialize()
+    {
+        
 
         //S->C receiving from server
         dispatcher.AddListener("/MessageWelcomePlayer", MessageWelcomePlayerRpc, OSCUtil.STRING, OSCUtil.INT);
@@ -121,6 +134,7 @@ public class Client : MonoBehaviour
         int PlayerID = message.ReadInt();
 
         localModel.clientID = PlayerID;
+        InitializeModel();
     }
 
     public void MessageWelcomePlayerRpc(OSCMessageIn message, IPEndPoint remote)
@@ -213,6 +227,7 @@ public class Client : MonoBehaviour
         
         
         GameOver?.Invoke(text, playerID);
+        
     }
 
     // ----- Outgoing RPCs (called from Controller): C->S

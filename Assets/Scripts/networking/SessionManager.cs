@@ -46,16 +46,11 @@ public class SessionManager : MonoBehaviour
         }
     }
 
-
-
     void StartServer() {
 		Debug.Log("Starting server: creating board");
 
 		Server server = GetComponent<Server>();
 		server.enabled = true;
-
-		//var boardOwner = FindFirstObjectByType<ModelOwner>();
-		//boardOwner.enabled = true;
 
 		IsServer = true;
 	}

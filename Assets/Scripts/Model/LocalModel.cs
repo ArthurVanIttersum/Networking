@@ -4,6 +4,8 @@ using System.Net.Sockets;
 using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.UIElements;
+using static TriedData;
+using static UnityEngine.Rendering.DebugUI;
 public class LocalModel
 {
     //data structures
@@ -22,6 +24,7 @@ public class LocalModel
     public DisplayGrid displayBoats;
     public DisplayGrid displayOpponentTried;
     public DisplayText textDisplay;
+    public SwitchOrientation orientation;
 
     //local values
     public int clientID;
@@ -46,15 +49,15 @@ public class LocalModel
         client.MessageAllPlayersReady += AllPlayersReady;
 
 
+        orientation.switchOrientation += SwitchOrientation;
+
 
         displayTried.UpdateDisplay(boardTried, triedData.TriedToSprite);
         displayBoats.UpdateDisplay(boardBoats, boatData.BoatsToSprite);
         displayOpponentTried.UpdateDisplay(boardOpponentTried, triedData.TriedToSprite);
     }
-    
-    
 
-    
+
     //state2
     public void AttackMiss(int row, int column, int origin)
     {
@@ -80,7 +83,7 @@ public class LocalModel
         if (origin == clientID)
         {
             textDisplay.UpdateDisplay("your attack hit something");
-            
+
             boardTried.WriteToGrid(row, column, TriedData.Tried.Hit);
             displayTried.UpdateDisplay(boardTried, triedData.TriedToSprite);
         }
@@ -91,7 +94,7 @@ public class LocalModel
             boardOpponentTried.WriteToGrid(row, column, TriedData.Tried.Hit);
             displayOpponentTried.UpdateDisplay(boardOpponentTried, triedData.TriedToSprite);
         }
-        
+
     }
 
     public void AttackFatal(int row, int column, int origin, BoatData.Boats type, bool horizontal)
@@ -104,7 +107,7 @@ public class LocalModel
             textDisplay.UpdateDisplay("your attack was fatal");
 
             List<Coordinate> coordinates = boatList.GenerateCoordinateList(column, row, boatData.boatSizes[(int)type], horizontal);
-            
+
             foreach (var coord in coordinates)
             {
                 boardTried.WriteToGrid(coord.row, coord.column, TriedData.Tried.SunkenBoat);
@@ -134,7 +137,7 @@ public class LocalModel
     {
         textDisplay.UpdateDisplay("placing boat");
         List<Coordinate> coordinates = boatList.GenerateCoordinateList(column, row, boatData.boatSizes[(int)boatType], horizontal);
-        
+
         boatList.boats.Add(new Boat(boatType, row, column, coordinates, horizontal));
         foreach (Coordinate coord in coordinates)//execution
         {
@@ -185,5 +188,35 @@ public class LocalModel
         {
             textDisplay.UpdateDisplay(text + " you lost");
         }
+        client.DisposeModel();
     }
+
+    public void Dispose()
+    {
+        //reset displays
+        displayTried.UpdateDisplay(new Board<Tried>(), triedData.TriedToSprite);
+        displayBoats.UpdateBoatSize(new BoatList());
+        displayBoats.UpdateDisplay(new Board<BoatData.Boats>(), boatData.BoatsToSprite);
+        displayOpponentTried.UpdateDisplay(new Board<Tried>(), triedData.TriedToSprite);
+        textDisplay.UpdateDisplay("DefaultText");
+        
+
+        //clear connections
+        if (client != null)
+        {
+            client.AttackMiss -= AttackMiss;
+            client.AttackHit -= AttackHit;
+            client.AttackFatal -= AttackFatal;
+            client.MessagePlacementValid -= BoatPlacementValid;
+            client.MessageBoatRemoved -= RemoveBoat;
+            client.GameOver -= GameOver;
+            client.MessageAllPlayersReady -= AllPlayersReady;
+        }
+
+        
+        orientation.switchOrientation -= SwitchOrientation;
+
+        client = null;
+    }
+
 }
