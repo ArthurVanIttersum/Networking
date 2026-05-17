@@ -24,22 +24,16 @@ public class LocalModel
     public DisplayGrid displayBoats;
     public DisplayGrid displayOpponentTried;
     public DisplayText textDisplay;
-    public SwitchOrientation orientation;
+    
 
     //local values
     public int clientID;
     public BoatData.Boats currentlySelectedBoatType;
     public int gamestate = 0;
     public bool horizontal = true;
-
-    public void SwitchOrientation(bool horizontal)
+    
+    public void Initialize()
     {
-        this.horizontal = horizontal;
-    }
-
-    public void Initialize(Client theClient)
-    {
-        client = theClient;
         client.AttackMiss += AttackMiss;
         client.AttackHit += AttackHit;
         client.AttackFatal += AttackFatal;
@@ -48,9 +42,7 @@ public class LocalModel
         client.GameOver += GameOver;
         client.MessageAllPlayersReady += AllPlayersReady;
 
-
-        orientation.switchOrientation += SwitchOrientation;
-
+        
 
         displayTried.UpdateDisplay(boardTried, triedData.TriedToSprite);
         displayBoats.UpdateDisplay(boardBoats, boatData.BoatsToSprite);
@@ -173,7 +165,6 @@ public class LocalModel
         {
             textDisplay.UpdateDisplay(text + " Your opponent can shoot first");
         }
-
     }
 
     //any state
@@ -188,10 +179,11 @@ public class LocalModel
         {
             textDisplay.UpdateDisplay(text + " you lost");
         }
-        client.DisposeModel();
+        client.GameNotRunning = true;
+        client.gameActive.UpdateText(client.GameNotRunning);
     }
 
-    public void Dispose()
+    public void Dispose()//resetting the game
     {
         //reset displays
         displayTried.UpdateDisplay(new Board<Tried>(), triedData.TriedToSprite);
@@ -214,7 +206,9 @@ public class LocalModel
         }
 
         
-        orientation.switchOrientation -= SwitchOrientation;
+        //orientation.switchButton -= UpdateBoolState;
+        //connection.switchButton -= UpdateBoolState;
+        //gameActive.switchButton -= UpdateBoolState;
 
         client = null;
     }

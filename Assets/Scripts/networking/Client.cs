@@ -1,13 +1,14 @@
 using NetworkConnections;
 using OSCTools;
 using System;
+//using UnityEngine.tvOS;
+using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using UnityEditor.PackageManager;
 //using UnityEditor.VersionControl;
 using UnityEngine;
-//using UnityEngine.tvOS;
-using System.Collections.Generic;
 
 
 /// <summary>
@@ -21,11 +22,12 @@ public class Client : MonoBehaviour
     TcpNetworkConnection connection;
     OSCDispatcher dispatcher;
 
-    
+    //runtime variables
+
 
     // Views subscribe here, on any client:
     //S->C
-    public event Action<string, int> MessageWelcomePlayer;
+    
     public event Action<BoatData.Boats, int, int, bool> MessagePlacementValid;
     public event Action<string> MessageBadBoat;
     public event Action<int, int> MessageBoatRemoved;
@@ -38,23 +40,25 @@ public class Client : MonoBehaviour
     public event Action<string, int> GameOver;
 
     public LocalModel localModel;
-
+    public bool isConnected = false;
+    public bool GameNotRunning = true;
     
+    public SwitchButton orientation;
+    public SwitchButton connectionStatus;
+    public SwitchButton gameActive;
 
     void Start()
     {
-        TcpClient client = new TcpClient();
-        client.Connect(new IPEndPoint(ServerIP, 50007));
-        connection = new TcpNetworkConnection(client);
-        // TODO: error handling
+        List<SwitchButton> buttons = FindObjectsByType<SwitchButton>(FindObjectsSortMode.None).ToList();
 
-        Debug.Log("Starting client, connecting to " + ServerIP);
+        orientation = buttons.Find(b => b.type == "Orientation");
+        connectionStatus = buttons.Find(b => b.type == "Connection");
+        gameActive = buttons.Find(b => b.type == "GameRunning");
 
-        // Initialize the dispatcher and callbacks for incoming OSC messages:
-        dispatcher = new OSCDispatcher();
-        dispatcher.ShowIncomingMessages = true;
-        Initialize();
-        
+        orientation.switchButton += UpdateOrientation;
+        connectionStatus.switchButton += UpdateConnection;
+        gameActive.switchButton += UpdateGameStatus;
+
     }
 
     /// <summary>
@@ -74,44 +78,131 @@ public class Client : MonoBehaviour
 
     void Update()
     {
+        if (!isConnected) return;
+        
         // Check for incoming packets, and deal with them:
         while (connection.Available() > 0)
         {
             HandlePacket(connection.GetPacket(), connection.Remote);
         }
-        // TODO: disconnect handling
+        
+        ConnectionStatus status = connection.Status;
+        if (status == ConnectionStatus.Disconnected)
+        {
+            if (GameNotRunning)
+            {
+                localModel.textDisplay.UpdateDisplay("You disconnected from the server");
+            }
+            GameNotRunning = true;
+            gameActive.UpdateText(GameNotRunning);
+            isConnected = false;
+            connectionStatus.UpdateText(isConnected);
+        }
+    }
+
+    public void UpdateOrientation()
+    {
+        if (localModel == null) return;
+        if (!isConnected) return;
+        if (GameNotRunning) return;
+        localModel.horizontal = !localModel.horizontal;
+        orientation.UpdateText(localModel.horizontal);
+    }
+
+    public void UpdateConnection()
+    {
+        if (!isConnected)
+        {
+            Connect();
+        }
+        else
+        {
+            DisConnect();
+        }
+    }
+
+    public void UpdateGameStatus()
+    {
+        if (GameNotRunning)//new game
+        {
+            DisposeModel();
+            if (isConnected)
+            {
+                NewGameRequest();
+            }
+            else
+            {
+                Connect();
+            }
+        }
+        else//resign
+        {
+            if (!isConnected) return;
+            
+            ResignRequest();
+        }
+    }
+
+    private void Connect()
+    {
+        TcpClient client = new TcpClient();
+        client.Connect(new IPEndPoint(ServerIP, 50007));
+        connection = new TcpNetworkConnection(client);
+        // TODO: error handling
+
+        Debug.Log("Starting client, connecting to " + ServerIP);
+
+        // Initialize the dispatcher and callbacks for incoming OSC messages:
+        dispatcher = new OSCDispatcher();
+        dispatcher.ShowIncomingMessages = true;
+        AddListeners();
+        isConnected = true;
+        connectionStatus.UpdateText(isConnected);
+    }
+
+    public void DisConnect()
+    {
+        connection?.Close();
+        connection = null;
+        isConnected = false;
+        connectionStatus.UpdateText(isConnected);
     }
 
     private void InitializeModel()
     {
         localModel = new LocalModel();
+        localModel.client = this;
 
         localModel.boatData = FindFirstObjectByType<BoatData>();
         localModel.triedData = FindFirstObjectByType<TriedData>();
 
         List<DisplayGrid> displays = FindObjectsByType<DisplayGrid>(FindObjectsSortMode.None).ToList();
-        localModel.displayBoats = displays.Find(d => d.type == "Boats");
-        localModel.displayTried = displays.Find(d => d.type == "Tried");
-        localModel.displayOpponentTried = displays.Find(d => d.type == "Lost");
+        localModel.displayBoats = displays.Find(b => b.type == "Boats");
+        localModel.displayTried = displays.Find(b => b.type == "Tried");
+        localModel.displayOpponentTried = displays.Find(b => b.type == "Lost");
 
         localModel.textDisplay = FindFirstObjectByType<DisplayText>();
-        localModel.orientation = FindFirstObjectByType<SwitchOrientation>();
-        
-        localModel.Initialize(this);
+
+        List<SwitchButton> buttons = FindObjectsByType<SwitchButton>(FindObjectsSortMode.None).ToList();
+
+        localModel.Initialize();
+
+        GameNotRunning = false;
+        gameActive.UpdateText(GameNotRunning);
     }
 
     public void DisposeModel()
     {
+        if (localModel == null) return;
         localModel.Dispose();
         localModel = null;
+        GameNotRunning = true;
+        gameActive.UpdateText(GameNotRunning);
     }
 
-    void Initialize()
+    void AddListeners()
     {
-        
-
         //S->C receiving from server
-        dispatcher.AddListener("/MessageWelcomePlayer", MessageWelcomePlayerRpc, OSCUtil.STRING, OSCUtil.INT);
         dispatcher.AddListener("/PlayerInfo", PrivateMessageRpc, OSCUtil.INT);
         dispatcher.AddListener("/MessagePlacementValid", MessagePlacementValidRpc, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT, OSCUtil.BOOL);
         dispatcher.AddListener("/MessageBadBoat", MessageBadBoatRpc, OSCUtil.STRING);
@@ -129,21 +220,16 @@ public class Client : MonoBehaviour
 
     //state1
 
+    
+
     public void PrivateMessageRpc(OSCMessageIn message, IPEndPoint remote)
     {
         int PlayerID = message.ReadInt();
-
-        localModel.clientID = PlayerID;
-        InitializeModel();
-    }
-
-    public void MessageWelcomePlayerRpc(OSCMessageIn message, IPEndPoint remote)
-    {
-        string text = message.ReadString();
-        int playerID = message.ReadInt();
+        if (localModel != null) return;
         
-
-        MessageWelcomePlayer?.Invoke(text, playerID);
+        InitializeModel();
+        localModel.clientID = PlayerID;
+        
     }
 
     public void MessagePlacementValidRpc(OSCMessageIn message, IPEndPoint remote)
@@ -233,13 +319,13 @@ public class Client : MonoBehaviour
     // ----- Outgoing RPCs (called from Controller): C->S
 
     //state1
+    public void NewGameRequest()//after a game has ended and a player wants to play again
+    {
+        if (!GameNotRunning) return;
+        OSCMessageOut message = new OSCMessageOut("/NewGame");
+        connection.Send(message.GetBytes());
+    }
 
-    
-    //public void JoinGameRequest() //JoinGameRequest is not a real request that is sent, it already exists in start
-    //{
-    //    OSCMessageOut message = new OSCMessageOut("/JoinGame");
-    //    connection.Send(message.GetBytes());
-    //}
 
     public void ChooseBoatLocationRequest(BoatData.Boats boatType, int row, int column, bool horizontal)
     {
@@ -255,6 +341,8 @@ public class Client : MonoBehaviour
 
     public void ReadyToMoveOnRequest()
     {
+        if (!isConnected) return;
+        if (GameNotRunning) return;
         OSCMessageOut message = new OSCMessageOut("/ReadyToMoveOn");
         connection.Send(message.GetBytes());
     }
@@ -267,4 +355,14 @@ public class Client : MonoBehaviour
         OSCMessageOut message = new OSCMessageOut("/AttackLocation").AddInt(row).AddInt(column);
         connection.Send(message.GetBytes());
     }
+
+
+    //any state
+    public void ResignRequest()
+    {
+        if (GameNotRunning) return;
+        OSCMessageOut message = new OSCMessageOut("/Resign");
+        connection.Send(message.GetBytes());
+    }
+
 }

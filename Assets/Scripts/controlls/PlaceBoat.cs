@@ -21,6 +21,8 @@ public class PlaceBoat : MonoBehaviour
     private void HandleClick(int row, int column, string type)
     {
         if (type != "Boats") return;
+        if (!client.isConnected) return;
+        if (client.GameNotRunning) return;
         if (client.localModel.gamestate != 0) return;
 
         if (!client.localModel.boardBoats.IsInBounds(row, column)) return;

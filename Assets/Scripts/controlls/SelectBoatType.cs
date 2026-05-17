@@ -20,6 +20,9 @@ public class SelectBoatType : MonoBehaviour
     private void HandleClick(int row, int column, string type)
     {
         if (type != "BoatType") return;
+        if (!client.isConnected) return;
+        if (client.GameNotRunning) return;
+        
         if (client.localModel.gamestate != 0) return;
         client.localModel.currentlySelectedBoatType = (BoatData.Boats)(column + 1);
     }

@@ -8,6 +8,7 @@ using System.Net.Sockets;
 //using UnityEditor.MemoryProfiler;
 //using UnityEditor.VersionControl;
 using UnityEngine;
+using UnityEngine.tvOS;
 using static UnityEngine.UI.Image;
 
 /// <summary>
@@ -26,6 +27,7 @@ public class Server : MonoBehaviour
     ServerModel model;
     
     public Dictionary<TcpNetworkConnection, int> playerIDs = new Dictionary<TcpNetworkConnection, int>();
+    public List<int> playerIDsReady = new();
 
     void Start()
     {
@@ -41,7 +43,7 @@ public class Server : MonoBehaviour
         dispatcher = new OSCDispatcher();
         dispatcher.ShowIncomingMessages = true;
         
-        Initialize();
+        listeners();
     }
 
     void Update()
@@ -69,18 +71,10 @@ public class Server : MonoBehaviour
             // We had fewer than 2 players, so this new client will be a player.
             playerIDs[newClient] = playerIDs.Count;
             Debug.Log($"Registering new player: {newClient.Remote} = player {playerIDs[newClient]}");
+
+            AddPlayerReady(newClient.Remote);
+
             
-            if (playerIDs.Count == 2)
-            { // start game
-                Debug.Log("Server: starting game");
-                foreach (var pid in playerIDs.Keys)
-                {
-                    SendPrivateInformationCommand(playerIDs[pid], pid);
-                }
-                InitializeModel();
-                model?.JoinGame(connections[0].Remote, connections[1].Remote);
-                
-            }
         }
         else
         {
@@ -89,6 +83,37 @@ public class Server : MonoBehaviour
             // TODO: Send a message to this client
         }
     }
+
+    void AddPlayerReady(IPEndPoint remote)
+    {
+        if (playerIDs.Count < 2) return;
+        if (model != null) return;
+        int id = GetPlayerIDFromEP(remote);
+        if (playerIDsReady.Contains(id)) return;
+
+        playerIDsReady.Add(id);
+        TestEnoughPlayersReady();
+    }
+
+    void TestEnoughPlayersReady()
+    {
+        if (playerIDsReady.Count == 2)
+        {
+            playerIDsReady.Clear();
+            StartGame();
+        }
+    }
+
+    void StartGame()
+    {
+        Debug.Log("Server: starting game");
+        foreach (var pid in playerIDs.Keys)
+        {
+            SendPrivateInformationCommand(playerIDs[pid], pid);
+        }
+        InitializeModel();
+    }
+
 
     void UpdateConnections()
     {
@@ -144,7 +169,7 @@ public class Server : MonoBehaviour
         if (!anyDisconnected) return;
 
         // Remaining player wins
-        foreach (var conn in connections)
+        foreach (TcpNetworkConnection conn in connections)
         {
             GameOver("opponent disconnected", GetPlayerIDFromEP(conn.Remote));
         }
@@ -154,6 +179,8 @@ public class Server : MonoBehaviour
 
     public void EndGame()
     {
+        if (model == null) return;
+        
         model.DestroyModel();
         model = null;
     }
@@ -165,7 +192,7 @@ public class Server : MonoBehaviour
         model.server = this;
         model.boatData = FindFirstObjectByType<BoatData>();
 
-        model.MessageWelcomePlayer += MessageWelcomePlayer;
+        
         model.MessagePlayerReady += MessagePlayerReady;
         model.MessageAllPlayersReady += MessageAllPlayersReady;
 
@@ -175,15 +202,16 @@ public class Server : MonoBehaviour
         model.GameOver += GameOver;
     }
 
-    void Initialize()
+    void listeners()
     {
-        
+
 
         // Subscribe listeners for incoming messages:
         // The (optional) list of parameter types (OSCUtil.INT) lets the dispatcher filter
         //  messages that do not satisfy the expected signature (=parameter list):
-        
-        //dispatcher.AddListener("/JoinGame", JoinGameRpc);
+        dispatcher.AddListener("/NewGame", NewGameRpc);
+        dispatcher.AddListener("/Resign", ResignRpc);
+
         dispatcher.AddListener("/ChooseBoatLocation", ChooseBoatLocationRpc);
         dispatcher.AddListener("/RemoveBoat", RemoveBoatRpc);
         dispatcher.AddListener("/ReadyToMoveOn", ReadyToMoveOnRpc);
@@ -192,11 +220,35 @@ public class Server : MonoBehaviour
     }
 
     // ----- Handle incoming RPCs (called by dispatcher): C->S
-    //public void JoinGameRpc(OSCMessageIn message, IPEndPoint remote)// not a real one
-    //{
-    //    model?.JoinGame(remote);
-    //}
 
+
+    //any state
+
+    public void NewGameRpc(OSCMessageIn message, IPEndPoint remote)
+    {
+        if (playerIDs.Count < 2) return;
+        if (model != null) return;
+        int id = GetPlayerIDFromEP(remote);
+        if (playerIDsReady.Contains(id)) return;
+        
+        playerIDsReady.Add(id);
+        if (playerIDsReady.Count == 2)
+        {
+            playerIDsReady.Clear();
+            StartGame();
+        }
+
+    }
+
+    public void ResignRpc(OSCMessageIn message, IPEndPoint remote)
+    {
+        int id = GetPlayerIDFromEP(remote);
+        int otherid = 1 - id;
+        GameOver("player " + id + " resigned", otherid);
+        EndGame();
+    }
+
+    //state 1
     public void ChooseBoatLocationRpc(OSCMessageIn message, IPEndPoint remote)
     {
         BoatData.Boats boatType = (BoatData.Boats)message.ReadInt();
@@ -221,7 +273,7 @@ public class Server : MonoBehaviour
         model?.ReadyToMoveOn(remote);
     }
 
-
+    //state 2
 
     public void AttackLocationRpc(OSCMessageIn message, IPEndPoint remote)
     {
@@ -231,6 +283,7 @@ public class Server : MonoBehaviour
         model?.ShootMissile(column, row, remote);
     }
 
+    
 
     // ----- Outgoing RPCs: S->C
     // This RPC is called when a client joins who is a player:
@@ -252,13 +305,6 @@ public class Server : MonoBehaviour
     }
     //S->C
 
-    
-
-    public void MessageWelcomePlayer(string text, int playerID)
-    {
-        OSCMessageOut message = new OSCMessageOut("/MessageWelcomePlayer").AddString(text).AddInt(playerID);
-        Broadcast(message.GetBytes());
-    }
     public void MessagePlacementValid(BoatData.Boats boatType, int row, int column, IPEndPoint destination, bool horizontal)
     {
         OSCMessageOut message = new OSCMessageOut("/MessagePlacementValid").AddInt((int)boatType).AddInt(row).AddInt(column).AddBool(horizontal);

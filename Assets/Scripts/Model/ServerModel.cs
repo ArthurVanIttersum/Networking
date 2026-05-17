@@ -31,7 +31,7 @@ public class ServerModel
 
 
     //S->C events
-    public event Action<string, int> MessageWelcomePlayer;
+    
     public event Action<string> MessagePlacementValid;
     public event Action<string> MessageBoatRemoved;
     public event Action<string, int> MessagePlayerReady;
@@ -46,15 +46,6 @@ public class ServerModel
 
     //state0
 
-    public void JoinGame(IPEndPoint player1, IPEndPoint player2)
-    {
-        if (!IsStateRight(0)) return;
-
-        int id1 = server.GetPlayerIDFromEP(player1);
-        int id2 = server.GetPlayerIDFromEP(player2);
-        server.MessageWelcomePlayer("welcome player", id1);
-        server.MessageWelcomePlayer("welcome player", id2);
-    }
     public void PlaceBoat(int column, int row, IPEndPoint origin, BoatData.Boats type, bool horizontal)//place whole boat
     {
         if (!IsStateRight(0)) return;
@@ -198,7 +189,7 @@ public class ServerModel
     {
         //remove any remaining events
 
-        MessageWelcomePlayer = null;
+        
         MessagePlacementValid = null;
         MessageBoatRemoved = null;
         MessagePlayerReady = null;

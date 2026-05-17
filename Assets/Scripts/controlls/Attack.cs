@@ -20,6 +20,9 @@ public class Attack : MonoBehaviour
     private void HandleClick(int row, int column, string type)
     {
         if (type != "Tried") return;
+        if (!client.isConnected) return;
+        if (client.GameNotRunning) return;
+        
         if (client.localModel.gamestate != 1) return;
         client.AttackLocationRequest(row, column);
     }

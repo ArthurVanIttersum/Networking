@@ -47,7 +47,7 @@ public class SessionManager : MonoBehaviour
     }
 
     void StartServer() {
-		Debug.Log("Starting server: creating board");
+		Debug.Log("Starting server");
 
 		Server server = GetComponent<Server>();
 		server.enabled = true;
@@ -55,12 +55,10 @@ public class SessionManager : MonoBehaviour
 		IsServer = true;
 	}
 	void StartClient() {
-		Debug.Log($"Starting client: enabling controller");
+		Debug.Log($"Starting client");
 
 		Client client = GetComponent<Client>();
 		client.enabled = true;
-
-		
 
 		IsClient = true;
 	}	
