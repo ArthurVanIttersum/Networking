@@ -8,8 +8,6 @@ using System.Net.Sockets;
 //using UnityEditor.MemoryProfiler;
 //using UnityEditor.VersionControl;
 using UnityEngine;
-using UnityEngine.tvOS;
-using static UnityEngine.UI.Image;
 
 /// <summary>
 /// The Server is the class that manages network connections with all clients, and 
