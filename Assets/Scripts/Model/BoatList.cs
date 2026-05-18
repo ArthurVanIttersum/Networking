@@ -1,8 +1,6 @@
 
 using System.Collections.Generic;
 
-
-
 public class BoatList//list of all boats a player has
 {
     public List<Boat> boats = new();
@@ -30,16 +28,25 @@ public class BoatList//list of all boats a player has
         return true;
     }
 
-    public bool IsValidSet()
+    public bool IsValidSet(out string error)
     {
-        if (boats.Count != 5) return false;//quick check if the number of boats is right
+        if (boats.Count != 5)//quick check if the number of boats is right
+        {
+            error = "Number of boats is incorrect.";
+            return false;
+        }
         for (int i = 1; i < 6; i++)//loop through the boat types
         {
             BoatData.Boats boatType = (BoatData.Boats)i;
             Boat boatFound = boats.Find(t => t.boatType == boatType);
-            if (boatFound == null) return false;
+            if (boatFound == null)
+            {
+                error = "Not all boat types are present.";
+                return false;
+            }
         }
 
+        error = "";
         return true;//if no problem found return true
     }
 

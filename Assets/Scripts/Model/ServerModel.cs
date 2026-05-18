@@ -99,7 +99,12 @@ public class ServerModel
         if (readyPlayers.Count == 2) return;//quick sanity check
 
         int id = server.GetPlayerIDFromEP(origin);
-        if (!boatLists[id].IsValidSet()) return;//player does not have a valid set of boats
+        string message;
+        if (!boatLists[id].IsValidSet(out message))//player does not have a valid set of boats
+        {
+            server.MessageBadBoat(message, origin);
+            return;
+        }
 
         readyPlayers.Add(origin);
 
