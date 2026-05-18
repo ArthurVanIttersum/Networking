@@ -292,8 +292,6 @@ public class Server : MonoBehaviour
     }
     
     
-    
-    
     void Broadcast(byte[] packet)
     {
         foreach (var conn in connections)
@@ -301,7 +299,7 @@ public class Server : MonoBehaviour
             conn.Send(packet);
         }
     }
-    //S->C
+    //S->C state 1
 
     public void MessagePlacementValid(BoatData.Boats boatType, int row, int column, IPEndPoint destination, bool horizontal)
     {
@@ -336,7 +334,7 @@ public class Server : MonoBehaviour
         Broadcast(message.GetBytes());
     }
 
-
+    //state 2
 
     public void AttackHit(int row, int column, int origin)
     {

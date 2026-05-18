@@ -17,9 +17,8 @@ public class ServerModel
 
 
     //local values
-    
-    public int currentPlayer = 0;
-    public int otherPlayer = 1;
+
+    public int currentPlayerID = 0;
     public List<IPEndPoint> readyPlayers = new();
     public int gamestate = 0;
 
@@ -27,7 +26,7 @@ public class ServerModel
 
 
     //S->C events
-    
+
     public event Action<string> MessagePlacementValid;
     public event Action<string> MessageBoatRemoved;
     public event Action<string, int> MessagePlayerReady;
@@ -49,7 +48,7 @@ public class ServerModel
         int id = server.GetPlayerIDFromEP(origin);
 
         List<Coordinate> coordinates = boatLists[0].GenerateCoordinateList(column, row, boatData.boatSizes[(int)type], horizontal);
-        
+
 
         bool isValid = true;
         foreach (Coordinate coord in coordinates)
@@ -65,7 +64,7 @@ public class ServerModel
         {
             Debug.Log("Client tries to place bad boat");
             server.MessageBadBoat("The boat location is blocked by another boat", origin);
-            return; // no message?
+            return;
         }
         boatLists[id].boats.Add(new Boat(type, row, column, coordinates, horizontal));
         foreach (Coordinate coord in coordinates)//execution
@@ -81,9 +80,9 @@ public class ServerModel
         if (!IsStateRight(0)) return;
 
         int id = server.GetPlayerIDFromEP(origin);
-
+        if (!BoatBoards[id].IsInBounds(row, column)) return; //check if the coordinate is in the bounds of the grid
         Boat boat = boatLists[id].FindBoat(row, column);
-        //todo: add test
+
         foreach (var coord in boat.coordinates)
         {
             BoatBoards[id].WriteToGrid(coord.row, coord.column, BoatData.Boats.Empty);
@@ -101,7 +100,7 @@ public class ServerModel
 
         int id = server.GetPlayerIDFromEP(origin);
         if (!boatLists[id].IsValidSet()) return;//player does not have a valid set of boats
-        
+
         readyPlayers.Add(origin);
 
         if (readyPlayers.Count == 1)
@@ -120,28 +119,32 @@ public class ServerModel
     //state1
     public void ShootMissile(int column, int row, IPEndPoint origin)
     {
-        // TODO: What happens if a client sends this message during the wrong phase?
-        if (!IsStateRight(1)) return;
+        if (!IsStateRight(1)) return;//check if the game is in the right state
 
         int id = server.GetPlayerIDFromEP(origin);
-        int otherid = 1 - id;
+        int otherid = 1 - id;//ids are either 0 or 1. 1-0=1, 1-1=0.
 
-        if (id != currentPlayer) return;//ignore messages from the wrong player
+        if (id != currentPlayerID) return;//ignore messages from the wrong player
+        if (!BoatBoards[otherid].IsInBounds(row, column)) return; //check if the attack is valid
+        if (TriedBoards[otherid].SampleGrid(row, column) != TriedData.Tried.Empty) return;//check if the coordinate has been attacked already
 
 
-        //check board data
-        if (!BoatBoards[otherid].IsInBounds(row, column)) return;
+
         BoatData.Boats boatData = BoatBoards[otherid].SampleGrid(row, column);
 
         //send message back
-        if (boatData == BoatData.Boats.Empty)
+
+        if (boatData == BoatData.Boats.Empty)//if it's a miss
         {
-            server.AttackMiss(row, column, currentPlayer);
+            TriedBoards[otherid].WriteToGrid(row, column, TriedData.Tried.Miss);
+            server.AttackMiss(row, column, currentPlayerID);
         }
-        else//not a miss
+        else//if it's a hit
         {
-            TriedBoards[1 - id].WriteToGrid(row, column, TriedData.Tried.Hit);
+            TriedBoards[otherid].WriteToGrid(row, column, TriedData.Tried.Hit);
             Boat boat = boatLists[otherid].FindBoat(row, column);
+
+            //test if the attack is fatal
             bool isFatal = true;
             foreach (Coordinate coord in boat.coordinates)
             {
@@ -149,34 +152,32 @@ public class ServerModel
                 if (TriedBoards[otherid].SampleGrid(coord.row, coord.column) == TriedData.Tried.Empty)
                 { isFatal = false; break; }
             }
-            
-            if (isFatal)
+
+            if (isFatal)//if it's fatal
             {
                 foreach (Coordinate coord in boat.coordinates)
                 {
                     TriedBoards[otherid].WriteToGrid(coord.row, coord.column, TriedData.Tried.SunkenBoat);
                 }
                 boat.sunk = true;
-                server.AttackFatal(boat.row, boat.column, currentPlayer, boat.boatType, boat.horizontal);
+                server.AttackFatal(boat.row, boat.column, currentPlayerID, boat.boatType, boat.horizontal);
                 if (boatLists[otherid].IsAllSunk())
                 {
                     server.GameOver("game over", id);
                     server.EndGame();
                 }
             }
-            else
+            else//if it's not fatal
             {
-                server.AttackHit(row, column, currentPlayer);
+                server.AttackHit(row, column, currentPlayerID);
             }
-            
         }
 
         //switch current player
-        currentPlayer = 1 - currentPlayer;//alternate between players
-        otherPlayer = 1 - currentPlayer;//the opposite
+        currentPlayerID = otherid;
     }
 
-    public bool IsStateRight(int gameState)
+    public bool IsStateRight(int gameState)//helper function
     {
         return (gameState == gamestate);
     }
@@ -184,8 +185,6 @@ public class ServerModel
     public void DestroyModel()
     {
         //remove any remaining events
-
-        
         MessagePlacementValid = null;
         MessageBoatRemoved = null;
         MessagePlayerReady = null;

@@ -19,11 +19,13 @@ public class Attack : MonoBehaviour
 
     private void HandleClick(int row, int column, string type)
     {
-        if (type != "Tried") return;
-        if (!client.isConnected) return;
-        if (client.GameNotRunning) return;
+        if (type != "Tried") return;//check if we're clicking on the right board
+        if (!client.isConnected) return;//check if the player is connected
+        if (client.GameNotRunning) return;//check if the game is running
+        if (client.localModel.gamestate != 1) return;//check if the game is in the attack state
+        if (!client.localModel.boardTried.IsInBounds(row, column)) return;//check if the attack is in the bounds of the grid
+        if (client.localModel.boardTried.SampleGrid(row, column) != TriedData.Tried.Empty) return;//check if the attack has been tried already
         
-        if (client.localModel.gamestate != 1) return;
         client.AttackLocationRequest(row, column);
     }
 }
