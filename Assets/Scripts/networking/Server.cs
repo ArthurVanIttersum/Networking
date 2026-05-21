@@ -40,6 +40,7 @@ public class Server : MonoBehaviour
         // Initialize the dispatcher and callbacks for incoming OSC messages:
         dispatcher = new OSCDispatcher();
         dispatcher.ShowIncomingMessages = true;
+        OSCLog.logging = true;
         
         listeners();
     }
@@ -67,24 +68,37 @@ public class Server : MonoBehaviour
         if (playerIDs.Count < 2)
         {
             // We had fewer than 2 players, so this new client will be a player.
-            playerIDs[newClient] = playerIDs.Count;
+            int newID = 0;
+            if (playerIDs.Count == 0)
+            {
+                newID = playerIDs.Count;
+            }
+            else if (playerIDs.Count == 1)
+            {
+                newID = 1 - playerIDs.First().Value;
+            }
+            playerIDs[newClient] = newID;
+            
+
+
             Debug.Log($"Registering new player: {newClient.Remote} = player {playerIDs[newClient]}");
 
             AddPlayerReady(newClient.Remote);
 
-            
         }
         else
         {
+            newClient.Send(new OSCMessageOut("/ServerFull").GetBytes());
+            newClient.Close();
             Debug.Log("Sorry - already have two players");
-            // Note: this client is still allowed to join as spectator, but not as player!
-            // TODO: Send a message to this client
+            
         }
     }
 
     void AddPlayerReady(IPEndPoint remote)
     {
-        if (playerIDs.Count < 2) return;
+        Debug.Log("a player is ready");
+        
         if (model != null) return;
         int id = GetPlayerIDFromEP(remote);
         if (playerIDsReady.Contains(id)) return;
@@ -95,10 +109,19 @@ public class Server : MonoBehaviour
 
     void TestEnoughPlayersReady()
     {
+        Debug.Log("testing player count");
         if (playerIDsReady.Count == 2)
         {
+            Debug.Log(playerIDsReady.Count);
+            Debug.Log(playerIDsReady[0]);
+            Debug.Log(playerIDsReady[1]);
             playerIDsReady.Clear();
             StartGame();
+        }
+        else
+        {
+            Debug.Log(playerIDsReady.Count);
+            Debug.Log(playerIDsReady[0]);
         }
     }
 
@@ -126,19 +149,19 @@ public class Server : MonoBehaviour
         }
     }
 
-    public TcpNetworkConnection getFromEndPoint(IPEndPoint destination)
+    public TcpNetworkConnection getFromEndPoint(IPEndPoint destination)//helper function
     {
         return connections.Find(a => a.Remote == destination);
     }
 
-    public int GetPlayerIDFromEP(IPEndPoint destination)
+    public int GetPlayerIDFromEP(IPEndPoint destination)//helper function
     {
         return playerIDs[getFromEndPoint(destination)];
     }
 
     void HandlePacket(byte[] packet, IPEndPoint remote)
     {
-        if (packet.Length == 1 && packet[0] == 0) return; // ignore heartbeat
+        if (packet.Length == 1 && packet[0] == 0) return;// ignore heartbeat
         
         OSCMessageIn mess = new OSCMessageIn(packet);
         Debug.Log("Message arrives on server: " + mess);
@@ -224,18 +247,10 @@ public class Server : MonoBehaviour
 
     public void NewGameRpc(OSCMessageIn message, IPEndPoint remote)
     {
-        if (playerIDs.Count < 2) return;
-        if (model != null) return;
-        int id = GetPlayerIDFromEP(remote);
-        if (playerIDsReady.Contains(id)) return;
         
-        playerIDsReady.Add(id);
-        if (playerIDsReady.Count == 2)
-        {
-            playerIDsReady.Clear();
-            StartGame();
-        }
-
+        if (model != null) return;
+        
+        AddPlayerReady(remote);
     }
 
     public void ResignRpc(OSCMessageIn message, IPEndPoint remote)

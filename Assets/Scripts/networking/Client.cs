@@ -6,6 +6,8 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using UnityEditor.PackageManager;
+
 //using UnityEditor.VersionControl;
 using UnityEngine;
 
@@ -38,13 +40,13 @@ public class Client : MonoBehaviour
     public event Action<int, int, int, BoatData.Boats, bool> AttackFatal;
     public event Action<string, int> GameOver;
 
-    public LocalModel localModel;
-    public bool isConnected = false;
-    public bool GameNotRunning = true;
-    
-    public SwitchButton orientation;
-    public SwitchButton connectionStatus;
-    public SwitchButton gameActive;
+    [HideInInspector] public LocalModel localModel;
+    [HideInInspector] public bool isConnected = false;
+    [HideInInspector] public bool GameNotRunning = true;
+
+    [HideInInspector] public SwitchButton orientation;
+    [HideInInspector] public SwitchButton connectionStatus;
+    [HideInInspector] public SwitchButton gameActive;
 
     void Start()
     {
@@ -88,7 +90,7 @@ public class Client : MonoBehaviour
         ConnectionStatus status = connection.Status;
         if (status == ConnectionStatus.Disconnected)
         {
-            if (GameNotRunning)
+            if (!GameNotRunning)
             {
                 localModel.textDisplay.UpdateDisplay("You disconnected from the server");
             }
@@ -112,11 +114,14 @@ public class Client : MonoBehaviour
     {
         if (!isConnected)
         {
+            DisposeModel();//close any game that might still be running localy
             Connect();
         }
         else
         {
             DisConnect();
+            GameNotRunning = true;
+            gameActive.UpdateText(GameNotRunning);
         }
     }
 
@@ -169,6 +174,7 @@ public class Client : MonoBehaviour
 
     private void InitializeModel()
     {
+        Debug.Log("initializing model");
         localModel = new LocalModel();
         localModel.client = this;
 
