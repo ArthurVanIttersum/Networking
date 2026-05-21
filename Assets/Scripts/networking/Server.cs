@@ -105,6 +105,9 @@ public class Server : MonoBehaviour
         if (playerIDsReady.Contains(id)) return;
 
         playerIDsReady.Add(id);
+
+        if (playerIDs.Count != 2) return;
+        
         TestEnoughPlayersReady();
     }
 
@@ -113,16 +116,13 @@ public class Server : MonoBehaviour
         Debug.Log("testing player count");
         if (playerIDsReady.Count == 2)
         {
-            Debug.Log(playerIDsReady.Count);
-            Debug.Log(playerIDsReady[0]);
-            Debug.Log(playerIDsReady[1]);
+            
             playerIDsReady.Clear();
             StartGame();
         }
         else
         {
-            Debug.Log(playerIDsReady.Count);
-            Debug.Log(playerIDsReady[0]);
+            PressedStartGame();
         }
     }
 
@@ -369,9 +369,16 @@ public class Server : MonoBehaviour
         OSCMessageOut message = new OSCMessageOut("/AttackFatal").AddInt(row).AddInt(column).AddInt(origin).AddInt((int)type).AddBool(horizontal);
         Broadcast(message.GetBytes());
     }
+    //any state
     public void GameOver(string text, int winner)
     {
         OSCMessageOut message = new OSCMessageOut("/GameOver").AddString(text).AddInt(winner);
+        Broadcast(message.GetBytes());
+    }
+
+    public void PressedStartGame()
+    {
+        OSCMessageOut message = new OSCMessageOut("/PressedStartGame");
         Broadcast(message.GetBytes());
     }
 }

@@ -93,10 +93,7 @@ public class Client : MonoBehaviour
         ConnectionStatus status = connection.Status;
         if (status == ConnectionStatus.Disconnected)
         {
-            if (!GameNotRunning)
-            {
-                localModel.textDisplay.UpdateDisplay("You disconnected from the server");
-            }
+            textDisplay.UpdateDisplay("You disconnected from the server");
             GameNotRunning = true;
             gameActive.UpdateText(GameNotRunning);
             isConnected = false;
@@ -173,6 +170,7 @@ public class Client : MonoBehaviour
         connection = null;
         isConnected = false;
         connectionStatus.UpdateText(isConnected);
+
     }
 
     private void InitializeModel()
@@ -223,6 +221,7 @@ public class Client : MonoBehaviour
         dispatcher.AddListener("/AttackFatal", AttackFatalRpc, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT, OSCUtil.BOOL);
         dispatcher.AddListener("/GameOver", GameOverRpc, OSCUtil.STRING, OSCUtil.INT);
         dispatcher.AddListener("/ServerFull", ServerFullRpc);
+        dispatcher.AddListener("/PressedStartGame", PressedStartGameRpc);
     }
 
     // ----- Incoming RPCs (events are triggered, and View classes subscribe): S->C
@@ -315,6 +314,7 @@ public class Client : MonoBehaviour
         AttackFatal?.Invoke(row, column, origin, type, horizontal);
     }
 
+    //any state
     public void GameOverRpc(OSCMessageIn message, IPEndPoint remote)
     {
         string text = message.ReadString();
@@ -334,6 +334,14 @@ public class Client : MonoBehaviour
         gameActive.UpdateText(GameNotRunning);
         isConnected = false;
         connectionStatus.UpdateText(isConnected);
+
+    }
+
+    public void PressedStartGameRpc(OSCMessageIn message, IPEndPoint remote)
+    {
+        Debug.Log("Waiting for both players to start the game");
+        textDisplay.UpdateDisplay("Waiting for both players to start the game");
+        
 
     }
 

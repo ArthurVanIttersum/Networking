@@ -47,6 +47,7 @@ public class LocalModel
         displayTried.UpdateDisplay(boardTried, triedData.TriedToSprite);
         displayBoats.UpdateDisplay(boardBoats, boatData.BoatsToSprite);
         displayOpponentTried.UpdateDisplay(boardOpponentTried, triedData.TriedToSprite);
+        textDisplay.UpdateDisplay("The Game has started");
     }
 
 
@@ -95,7 +96,7 @@ public class LocalModel
 
         if (origin == clientID)
         {
-            Debug.Log("wow fatal yay you");
+            
             textDisplay.UpdateDisplay("your attack was fatal");
 
             List<Coordinate> coordinates = boatList.GenerateCoordinateList(column, row, boatData.boatSizes[(int)type], horizontal);
@@ -108,7 +109,7 @@ public class LocalModel
         }
         else
         {
-            Debug.Log("wow fatal yay other");
+            
             textDisplay.UpdateDisplay("opponent's attack was fatal");
 
             Boat boat = boatList.FindBoat(row, column);
@@ -190,7 +191,7 @@ public class LocalModel
         displayBoats.UpdateBoatSize(new BoatList());
         displayBoats.UpdateDisplay(new Board<BoatData.Boats>(), boatData.BoatsToSprite);
         displayOpponentTried.UpdateDisplay(new Board<Tried>(), triedData.TriedToSprite);
-        textDisplay.UpdateDisplay("DefaultText");
+        textDisplay.UpdateDisplay("Waiting for other player to start the game");
         
 
         //clear connections
