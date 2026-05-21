@@ -90,6 +90,7 @@ public class Server : MonoBehaviour
         {
             newClient.Send(new OSCMessageOut("/ServerFull").GetBytes());
             newClient.Close();
+            connections.Remove(newClient);
             Debug.Log("Sorry - already have two players");
             
         }

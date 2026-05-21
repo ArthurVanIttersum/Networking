@@ -41,6 +41,8 @@ public class Client : MonoBehaviour
     public event Action<string, int> GameOver;
 
     [HideInInspector] public LocalModel localModel;
+    [HideInInspector] public DisplayText textDisplay;
+
     [HideInInspector] public bool isConnected = false;
     [HideInInspector] public bool GameNotRunning = true;
 
@@ -60,6 +62,7 @@ public class Client : MonoBehaviour
         connectionStatus.switchButton += UpdateConnection;
         gameActive.switchButton += UpdateGameStatus;
 
+        textDisplay = FindFirstObjectByType<DisplayText>();
     }
 
     /// <summary>
@@ -186,7 +189,7 @@ public class Client : MonoBehaviour
         localModel.displayTried = displays.Find(b => b.type == "Tried");
         localModel.displayOpponentTried = displays.Find(b => b.type == "Lost");
 
-        localModel.textDisplay = FindFirstObjectByType<DisplayText>();
+        localModel.textDisplay = textDisplay;
 
         List<SwitchButton> buttons = FindObjectsByType<SwitchButton>(FindObjectsSortMode.None).ToList();
 
@@ -219,6 +222,7 @@ public class Client : MonoBehaviour
         dispatcher.AddListener("/AttackMiss", AttackMissRpc, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT);
         dispatcher.AddListener("/AttackFatal", AttackFatalRpc, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT, OSCUtil.INT, OSCUtil.BOOL);
         dispatcher.AddListener("/GameOver", GameOverRpc, OSCUtil.STRING, OSCUtil.INT);
+        dispatcher.AddListener("/ServerFull", ServerFullRpc);
     }
 
     // ----- Incoming RPCs (events are triggered, and View classes subscribe): S->C
@@ -321,6 +325,18 @@ public class Client : MonoBehaviour
         
     }
 
+    public void ServerFullRpc(OSCMessageIn message, IPEndPoint remote)
+    {
+        Debug.Log("Server is full!");
+        textDisplay.UpdateDisplay("Server is full!");
+        connection?.Close();
+        GameNotRunning = true;
+        gameActive.UpdateText(GameNotRunning);
+        isConnected = false;
+        connectionStatus.UpdateText(isConnected);
+
+    }
+
     // ----- Outgoing RPCs (called from Controller): C->S
 
     //state1
@@ -369,5 +385,7 @@ public class Client : MonoBehaviour
         OSCMessageOut message = new OSCMessageOut("/Resign");
         connection.Send(message.GetBytes());
     }
+
+    
 
 }
